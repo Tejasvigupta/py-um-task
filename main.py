@@ -27,6 +27,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
+    #Added an exception handling for when user registers using an already registered email
     except IntegrityError as e:
         db.rollback() 
         raise HTTPException(
@@ -59,7 +60,6 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message":"User deleted successfully"}
 
-
 @app.put("/users/{user_id}")
 def update_user(user_id:int,user_data:schemas.UserBase,db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id== user_id).first()
@@ -67,6 +67,7 @@ def update_user(user_id:int,user_data:schemas.UserBase,db: Session = Depends(get
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
+    #Updating old user data with new one
     updated_data = user_data.model_dump(exclude_unset=True)
 
     for key,value in updated_data.items():
@@ -76,30 +77,32 @@ def update_user(user_id:int,user_data:schemas.UserBase,db: Session = Depends(get
     db.refresh(user)
     return {"user_id":user_id,"updated_data":user}
     
+#Helper function to sort the results
 def sort_key(t):
     _, interests,same_city,age_diff  = t
     return {-interests,not same_city,age_diff}
 
 @app.get("/find-matches/{user_id}", response_model=list[schemas.User])
 def find_matches(user_id: int,age_range:int = 5,db: Session = Depends(get_db)):
+    #Query the current user
     current_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is None:
+    if current_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     min_age,max_age = min(18,current_user.age-age_range),current_user.age+age_range
     filters = []
     filters.append(models.User.age>=min_age)
     filters.append(models.User.age<=max_age)
     filters.append(models.User.gender!=current_user.gender)
+
+    #Query the user based on agr and gender filter
     query = db.query(models.User).filter(*filters).all()
 
     target_interests = set(current_user.interests)
     matches = []
     for user in query:
-        print(user)
-        print(user.interests)
         user_interests = set(user.interests)
+        #Checking for common interests between the current user and filtered user
         common_interests = len(target_interests.intersection(user_interests))
-        print(common_interests)
         if common_interests>0:
             city = 0
             age_difference = 0
@@ -109,6 +112,7 @@ def find_matches(user_id: int,age_range:int = 5,db: Session = Depends(get_db)):
             p = (user,common_interests,city,age_difference)
             matches.append(p)
     
+    #sort the results using cutom sorting function
     sorted_matches = sorted(matches,key = sort_key)
     result = [match[0] for match in sorted_matches]
     return result

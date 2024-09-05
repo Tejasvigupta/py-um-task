@@ -3,13 +3,13 @@ from sqlalchemy.types import TypeDecorator, String
 from database import Base
 import json
 
+
+#This class converts python list to JSON 
 class JSONType(TypeDecorator):
     impl = String
 
     def process_bind_param(self, value, dialect):
         if value is not None:
-            print(value)
-            print(type(value))
             return json.dumps(value)
         return value
 
